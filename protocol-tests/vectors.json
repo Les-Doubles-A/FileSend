@@ -1,0 +1,251 @@
+{
+  "_comment": "Vecteurs partages par les deux implementations (Rust: windows/core/tests/vectors.rs, Kotlin: android/core/src/test/.../VectorsTest.kt). Ne modifier qu'avec docs/protocol.md.",
+  "pathsValid": [
+    {
+      "input": "a.txt",
+      "components": [
+        "a.txt"
+      ]
+    },
+    {
+      "input": "photos/v/b.jpg",
+      "components": [
+        "photos",
+        "v",
+        "b.jpg"
+      ]
+    },
+    {
+      "input": "Résumé été.pdf",
+      "components": [
+        "Résumé été.pdf"
+      ]
+    },
+    {
+      "input": "dossier.v2/fichier",
+      "components": [
+        "dossier.v2",
+        "fichier"
+      ]
+    },
+    {
+      "input": ".hidden",
+      "components": [
+        ".hidden"
+      ]
+    },
+    {
+      "input": "CONSOLE.txt",
+      "components": [
+        "CONSOLE.txt"
+      ]
+    },
+    {
+      "input": "COM10",
+      "components": [
+        "COM10"
+      ]
+    }
+  ],
+  "pathsInvalid": [
+    "",
+    "../x",
+    "a/../../x",
+    "/etc/passwd",
+    "C:/x",
+    "C:x",
+    "a\\b",
+    "CON",
+    "con.txt",
+    "a/NUL.log",
+    "x:stream",
+    "a/",
+    "a//b",
+    ".",
+    "a/./b",
+    "..",
+    "bad?.txt",
+    "end.",
+    "end ",
+    "a b/ ",
+    "a\u0000b",
+    "a\u0007b",
+    "a<b",
+    "a>b",
+    "a\"b",
+    "a|b",
+    "a*b",
+    "prn",
+    "Lpt1.txt",
+    "COM1",
+    "aux.tar.gz"
+  ],
+  "pathsInvalidGenerated": [
+    {
+      "unit": "a",
+      "times": 256,
+      "join": "",
+      "why": "composant de 256 caracteres"
+    },
+    {
+      "unit": "ab",
+      "times": 600,
+      "join": "/",
+      "why": "chemin de plus de 1024 octets"
+    }
+  ],
+  "pathsValidGenerated": [
+    {
+      "unit": "a",
+      "times": 255,
+      "join": "",
+      "why": "composant de 255 caracteres"
+    }
+  ],
+  "collisions": [
+    {
+      "existing": [],
+      "name": "a.txt",
+      "expected": "a.txt"
+    },
+    {
+      "existing": [
+        "a.txt"
+      ],
+      "name": "a.txt",
+      "expected": "a (1).txt"
+    },
+    {
+      "existing": [
+        "a.txt",
+        "a (1).txt"
+      ],
+      "name": "a.txt",
+      "expected": "a (2).txt"
+    },
+    {
+      "existing": [
+        "photos"
+      ],
+      "name": "photos",
+      "expected": "photos (1)"
+    },
+    {
+      "existing": [
+        ".bashrc"
+      ],
+      "name": ".bashrc",
+      "expected": ".bashrc (1)"
+    },
+    {
+      "existing": [
+        "archive.tar.gz"
+      ],
+      "name": "archive.tar.gz",
+      "expected": "archive.tar (1).gz"
+    }
+  ],
+  "prepareUpload": {
+    "request": {
+      "info": {
+        "alias": "Mon PC",
+        "fingerprint": "ab12",
+        "deviceType": "desktop"
+      },
+      "files": {
+        "f0": {
+          "id": "f0",
+          "relativePath": "photos/a.jpg",
+          "size": 5000,
+          "sha256": "00ff"
+        },
+        "f1": {
+          "id": "f1",
+          "relativePath": "notes.txt",
+          "size": 0
+        }
+      }
+    },
+    "response": {
+      "sessionId": "11111111-2222-3333-4444-555555555555",
+      "files": {
+        "f0": "tok-0",
+        "f1": "tok-1"
+      }
+    }
+  },
+  "failReasons": [
+    "Échec : Refusé",
+    "Échec : Introuvable",
+    "Échec : Interrompu",
+    "Échec : Disque plein"
+  ],
+  "messages": {
+    "formatSize": [
+      {
+        "bytes": 0,
+        "text": "0 o"
+      },
+      {
+        "bytes": 1023,
+        "text": "1023 o"
+      },
+      {
+        "bytes": 1024,
+        "text": "1,0 Ko"
+      },
+      {
+        "bytes": 1536,
+        "text": "1,5 Ko"
+      },
+      {
+        "bytes": 12582912,
+        "text": "12 Mo"
+      },
+      {
+        "bytes": 2147483648,
+        "text": "2,0 Go"
+      }
+    ],
+    "request": [
+      {
+        "alias": "Léa",
+        "count": 3,
+        "total": 12582912,
+        "title": "Léa veut envoyer 3 éléments",
+        "detail": "12 Mo"
+      },
+      {
+        "alias": "Léa",
+        "count": 1,
+        "total": 10,
+        "title": "Léa veut envoyer 1 élément",
+        "detail": "10 o"
+      }
+    ],
+    "status": {
+      "sending": "Envoi à Tel",
+      "sent": "Envoyé à Tel",
+      "receiving": "Réception de Tel",
+      "received": "Reçu de Tel",
+      "alias": "Tel"
+    },
+    "percent": [
+      {
+        "done": 0,
+        "total": 0,
+        "percent": 100
+      },
+      {
+        "done": 50,
+        "total": 200,
+        "percent": 25
+      },
+      {
+        "done": 300,
+        "total": 200,
+        "percent": 100
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+target/
+.identity/
+*.pem
+*.part
+.env
+gen/
+.gradle/
+build/
+local.properties
+*.apk
+*.jks
+*.keystore
+windows/installer/Output/
+
+# Ajouts : builds, secrets et sorties d'installeur
+installer/Output/
+node_modules/
+*.log
+__pycache__/
+.venv/
+.kotlin/
+.claude/settings.local.json

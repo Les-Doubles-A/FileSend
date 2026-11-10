@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FileSend notification</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="toast-body">
+  <div id="toast" role="alert" hidden>
+    <strong id="title"></strong>
+    <span id="detail"></span>
+    <div id="bar" role="progressbar" aria-label="Progression" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div>
+    <div class="actions" hidden>
+      <button id="refuse" type="button">Refuser</button>
+      <button id="accept" type="button" class="primary">Accepter</button>
+    </div>
+  </div>
+  <script src="toast.js"></script>
+</body>
+</html>

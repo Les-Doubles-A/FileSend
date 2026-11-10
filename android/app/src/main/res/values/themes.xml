@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fenetre translucide : le flou d'arriere-plan (Android 12+) n'est visible que si la fenetre l'est.
+         Sans flou, l'ecran dessine lui-meme un fond opaque. -->
+    <style name="Theme.FileSend" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

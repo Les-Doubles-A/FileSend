@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FileSend</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header data-tauri-drag-region>
+      <span id="me" data-tauri-drag-region></span>
+    </header>
+    <ul id="devices" aria-label="Appareils proches"></ul>
+    <p id="empty" role="status">Aucun appareil. Même Wi-Fi ?</p>
+    <p id="chip" role="status" hidden></p>
+    <p id="hint" role="status" aria-live="polite"></p>
+    <div id="drop" aria-hidden="true">Déposer</div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
