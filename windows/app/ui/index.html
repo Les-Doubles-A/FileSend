@@ -10,13 +10,187 @@
 <body>
   <main>
     <header data-tauri-drag-region>
-      <span id="me" data-tauri-drag-region></span>
+      <span id="me" data-tauri-drag-region title="Votre appareil"></span>
+      <div class="header-actions">
+        <button id="btn-qr" class="icon-btn" type="button" title="Partager ou recevoir par QR code (Wi-Fi ou Internet)" aria-label="QR code">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3h-3M14 20h7"/></svg>
+        </button>
+        <button id="btn-bt" class="icon-btn" type="button" title="Transfert Bluetooth" aria-label="Bluetooth">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+        </button>
+        <button id="btn-more" class="icon-btn" type="button" title="Texte, historique et réglages" aria-label="Plus d'options">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        </button>
+        <button id="btn-close" class="icon-btn" type="button" title="Réduire dans la zone de notification" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
     </header>
+
     <ul id="devices" aria-label="Appareils proches"></ul>
-    <p id="empty" role="status">Aucun appareil. Même Wi-Fi ?</p>
-    <p id="chip" role="status" hidden></p>
+
+    <div id="empty" role="status">
+      <p class="empty-title">Aucun appareil. Même Wi-Fi ?</p>
+      <div class="empty-actions">
+        <button id="btn-rescan" class="pill-btn" type="button">Actualiser</button>
+        <button id="btn-empty-qr" class="pill-btn" type="button">QR hors-réseau</button>
+      </div>
+    </div>
+
+    <div id="chip" role="status" hidden>
+      <span id="chip-text"></span>
+      <button id="chip-clear" type="button" aria-label="Vider la sélection">×</button>
+    </div>
+
     <p id="hint" role="status" aria-live="polite"></p>
-    <div id="drop" aria-hidden="true">Déposer</div>
+
+    <div class="dock">
+      <div class="plus-wrap">
+        <button id="btn-plus" class="plus-btn" type="button" title="Choisir des fichiers ou un dossier (Ctrl+V pour coller)" aria-label="Choisir des fichiers">+</button>
+        <div id="plus-menu" class="popover" hidden>
+          <button id="pick-files" type="button">Fichiers…</button>
+          <button id="pick-folder" type="button">Dossier…</button>
+          <button id="open-text" type="button">Envoyer un texte…</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="drop" aria-hidden="true">Déposer ici</div>
+
+    <!-- Feuille QR Code (Hors reseau E2E, Navigateur, Wi-Fi local, Recevoir) -->
+    <section id="sheet-qr" class="sheet" hidden aria-label="Partage par QR code">
+      <div class="sheet-head">
+        <strong>QR Code</strong>
+        <button class="icon-btn sheet-close" type="button" aria-label="Fermer">×</button>
+      </div>
+      <div class="seg" role="tablist">
+        <button class="seg-btn active" data-qr-tab="send" type="button">Partager</button>
+        <button class="seg-btn" data-qr-tab="recv" type="button">Recevoir</button>
+      </div>
+
+      <div id="qr-send-pane" class="sheet-body">
+        <div class="seg small">
+          <button class="seg-btn active" data-qr-mode="relay-e2e" type="button" title="Chiffré AES-256-GCM, fonctionne partout">Internet (Chiffré)</button>
+          <button class="seg-btn" data-qr-mode="relay-direct" type="button" title="Ouvrable dans n'importe quel navigateur sans app">Navigateur</button>
+          <button class="seg-btn" data-qr-mode="lan" type="button" title="Directement sur le même Wi-Fi, sans Internet">Wi-Fi</button>
+        </div>
+        <div id="qr-expiry-row" class="row-between">
+          <span class="muted">Expiration</span>
+          <div class="seg tiny">
+            <button class="seg-btn active" data-qr-exp="1h" type="button">1 h</button>
+            <button class="seg-btn" data-qr-exp="24h" type="button">24 h</button>
+            <button class="seg-btn" data-qr-exp="72h" type="button">72 h</button>
+          </div>
+        </div>
+        <button id="qr-generate" class="primary-btn" type="button">Générer le QR code</button>
+        <p id="qr-status" class="muted center"></p>
+        <div id="qr-result" class="qr-card" hidden>
+          <img id="qr-img" alt="QR Code FileSend">
+          <div class="qr-meta">
+            <strong id="qr-name"></strong>
+            <span id="qr-info" class="muted"></span>
+          </div>
+          <div class="row-gap">
+            <button id="qr-copy" class="pill-btn" type="button">Copier le lien</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="qr-recv-pane" class="sheet-body" hidden>
+        <p class="muted">Collez un lien <code>filesend://</code> ou un lien de partage pour télécharger et déchiffrer automatiquement.</p>
+        <textarea id="qr-uri-input" rows="3" placeholder="filesend://r?u=... ou https://..."></textarea>
+        <div class="row-gap">
+          <button id="qr-paste" class="pill-btn" type="button">Coller</button>
+          <button id="qr-download" class="primary-btn flex1" type="button">Télécharger</button>
+        </div>
+        <p id="qr-recv-status" class="muted center"></p>
+      </div>
+    </section>
+
+    <!-- Feuille Bluetooth -->
+    <section id="sheet-bt" class="sheet" hidden aria-label="Bluetooth">
+      <div class="sheet-head">
+        <strong>Bluetooth</strong>
+        <div class="row-gap">
+          <button id="bt-refresh" class="icon-btn" type="button" title="Actualiser">↻</button>
+          <button class="icon-btn sheet-close" type="button" aria-label="Fermer">×</button>
+        </div>
+      </div>
+      <div class="sheet-body">
+        <label class="toggle-row">
+          <span>Recevoir en Bluetooth (FileSend)</span>
+          <input id="bt-rx-toggle" type="checkbox">
+        </label>
+        <p id="bt-status" class="muted"></p>
+        <ul id="bt-list" class="flat-list"></ul>
+        <div class="sheet-footer">
+          <span class="muted small-label">Appareil sans FileSend (OBEX) :</span>
+          <div class="row-gap">
+            <button id="bt-win-send" class="pill-btn flex1" type="button">Envoyer (Windows)</button>
+            <button id="bt-win-recv" class="pill-btn flex1" type="button">Recevoir (Windows)</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feuille Plus (Texte, Historique, Reglages) -->
+    <section id="sheet-more" class="sheet" hidden aria-label="Options">
+      <div class="sheet-head">
+        <strong>FileSend</strong>
+        <button class="icon-btn sheet-close" type="button" aria-label="Fermer">×</button>
+      </div>
+      <div class="seg" role="tablist">
+        <button class="seg-btn active" data-more-tab="text" type="button">Texte</button>
+        <button class="seg-btn" data-more-tab="history" type="button">Historique</button>
+        <button class="seg-btn" data-more-tab="settings" type="button">Réglages</button>
+      </div>
+
+      <div id="more-text-pane" class="sheet-body">
+        <textarea id="text-input" rows="4" placeholder="Collez un lien, un mot de passe, une note…"></textarea>
+        <div class="row-gap">
+          <button id="text-paste" class="pill-btn" type="button">Coller</button>
+          <button id="text-as-qr" class="pill-btn flex1" type="button">En QR code</button>
+        </div>
+        <div id="text-targets" class="target-chips"></div>
+      </div>
+
+      <div id="more-history-pane" class="sheet-body" hidden>
+        <div class="row-between">
+          <span class="muted">Transferts récents</span>
+          <button id="history-clear" class="link-btn" type="button">Effacer</button>
+        </div>
+        <ul id="history-list" class="flat-list"></ul>
+      </div>
+
+      <div id="more-settings-pane" class="sheet-body" hidden>
+        <label class="field">
+          <span>Nom de cet appareil</span>
+          <input id="set-alias" type="text" maxlength="32">
+        </label>
+        <div class="field">
+          <span>Dossier de réception</span>
+          <div class="row-gap">
+            <input id="set-dest" type="text" readonly class="flex1">
+            <button id="set-dest-pick" class="pill-btn" type="button">Changer</button>
+            <button id="set-dest-open" class="pill-btn" type="button" title="Ouvrir">📂</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Thème</span>
+          <div class="seg tiny">
+            <button class="seg-btn" data-theme="auto" type="button">Auto</button>
+            <button class="seg-btn" data-theme="light" type="button">Clair</button>
+            <button class="seg-btn" data-theme="dark" type="button">Sombre</button>
+          </div>
+        </div>
+        <label class="field">
+          <span>Relais Internet personnalisé (optionnel)</span>
+          <input id="set-relay" type="url" placeholder="Par défaut : relais chiffré automatique">
+        </label>
+        <p class="muted small-label">Astuce : clic droit sur un appareil pour activer l'acceptation automatique (★).</p>
+        <button id="set-save" class="primary-btn" type="button">Enregistrer</button>
+      </div>
+    </section>
   </main>
   <script src="app.js"></script>
 </body>

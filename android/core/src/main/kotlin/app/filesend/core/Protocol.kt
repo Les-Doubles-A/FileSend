@@ -24,6 +24,9 @@ data class PrepareUploadRequest(val info: DeviceInfo, val files: Map<String, Fil
 @Serializable
 data class PrepareUploadResponse(val sessionId: String, val files: Map<String, String>)
 
+@Serializable
+data class TextShareRequest(val info: DeviceInfo, val text: String)
+
 internal val ProtocolJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false // sha256 absent plutot que null, comme cote Rust
@@ -45,6 +48,7 @@ sealed interface Event {
     data class Progress(val session: String, val done: Long, val total: Long) : Event
     /** `tops` : elements de premier niveau enregistres. */
     data class Completed(val session: String, val from: DeviceInfo, val tops: List<String>) : Event
+    data class TextReceived(val from: DeviceInfo, val text: String) : Event
     data class Failed(val session: String, val reason: FailReason) : Event
 }
 

@@ -12,9 +12,15 @@
     <strong id="title"></strong>
     <span id="detail"></span>
     <div id="bar" role="progressbar" aria-label="Progression" aria-valuemin="0" aria-valuemax="100" hidden><i></i></div>
-    <div class="actions" hidden>
+    <div id="req-actions" class="actions" hidden>
       <button id="refuse" type="button">Refuser</button>
       <button id="accept" type="button" class="primary">Accepter</button>
+    </div>
+    <div id="prog-actions" class="actions" hidden>
+      <button id="cancel" type="button">Annuler</button>
+    </div>
+    <div id="text-actions" class="actions" hidden>
+      <button id="copy-text" type="button" class="primary">Copier</button>
     </div>
   </div>
   <script src="toast.js"></script>

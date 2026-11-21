@@ -2,7 +2,16 @@
 
 Dépôt GitHub : **https://github.com/Les-Doubles-A/FileSend**
 
-Envoi de fichiers et dossiers en réseau local, Windows et Android. Plan complet : `product/`. Protocole : `docs/protocol.md`.
+Envoi de fichiers, dossiers et textes sur Windows et Android : Wi-Fi local (HTTPS), **QR code hors réseau** (relais chiffré de bout en bout AES-256-GCM ou lien navigateur direct) et **Bluetooth** (RFCOMM natif + repli OBEX système). Plan complet : `product/`. Protocole : `docs/protocol.md`.
+
+### Fonctionnalités principales
+- **Wi-Fi local haute vitesse** : découverte multicast + sondage de repli, flux parallèles (jusqu'à 3 fichiers simultanés), tampons 256 Ko, débit en temps réel & annulation.
+- **QR code hors réseau (Internet / 4G) & Wi-Fi** :
+  - *Internet (Chiffré)* : chiffrement local AES-256-GCM (`FSE1`), lien `filesend://r?...` déchiffré automatiquement par FileSend.
+  - *Navigateur (Sans app)* : lien HTTPS ouvrable avec l'appareil photo de n'importe quel téléphone.
+  - *Wi-Fi local* : serveur HTTP éphémère sur le réseau local.
+- **Bluetooth** : transfert direct RFCOMM (`FSBT v1`, interopérable Windows ↔ Android) + repli Bluetooth système (OBEX / `fsquirt.exe`).
+- **Productivité sans surcharge** : envoi rapide de texte / presse-papiers (`Ctrl+V`), appareils de confiance (auto-acceptation `★`), historique des transferts, alias & dossier de réception personnalisables, thème Auto/Clair/Sombre.
 
 État : cœur Windows (tranche 1), découverte (T4), application Windows (T5, vérifications manuelles restantes), cœur Android (T6). Suite : voir `product/IMPLEMENTATION_PLAN.md`.
 
@@ -26,7 +35,7 @@ cargo build --release -p filesend-app       # windows/target/release/filesend-ap
 
 Options : `--minimized` (démarre dans la zone de notification), `--remove-sendto` (retire "Envoyer vers"). Variable `FILESEND_NO_SENDTO=1` : n'ajoute pas l'entrée "Envoyer vers" au premier lancement d'un build release. Reçus dans `Téléchargements\FileSend`. Contraste des couleurs : `node tools/check-contrast.mjs`.
 
-Installeur (Inno Setup 6 requis) : `powershell -File windows\installer\build.ps1` produit `windows\installer\Output\FileSend-Setup-0.1.0.exe`. Installation par utilisateur (sans droits admin), raccourci menu Démarrer, entrée "Envoyer vers", démarrage automatique optionnel. La désinstallation retire "Envoyer vers".
+Installeur (Inno Setup 6 requis) : `powershell -File windows\installer\build.ps1` produit `windows\installer\Output\FileSend-Setup-0.2.0.exe`. Installation par utilisateur (sans droits admin), raccourci menu Démarrer, entrée "Envoyer vers", démarrage automatique optionnel. La désinstallation retire "Envoyer vers".
 
 ## Android (`android`)
 
@@ -54,14 +63,14 @@ Le certificat TLS est généré au premier lancement dans `<dossier>\.identity`.
 <!-- installeur-release -->
 ## Installation
 
-Téléchargez **`FileSend-Setup-0.1.0.exe`** depuis la [dernière release](https://github.com/Les-Doubles-A/FileSend/releases/latest), puis lancez-le.
+Téléchargez **`FileSend-Setup-0.2.0.exe`** depuis la [dernière release](https://github.com/Les-Doubles-A/FileSend/releases/latest), puis lancez-le.
 
 L'installation se fait pour l'utilisateur courant, sans droits administrateur (par défaut dans `%LOCALAPPDATA%\Programs\FileSend`), avec un raccourci dans le menu Démarrer et une désinstallation depuis les Paramètres Windows.
 
 L'installeur n'est pas signé : si Windows SmartScreen l'affiche, cliquez sur « Informations complémentaires » puis « Exécuter quand même ».
 
-La release contient aussi l'APK Android (`FileSend-0.1.0.apk`).
+La release contient aussi l'APK Android (`FileSend-0.2.0.apk`).
 
 ### Recréer l'installeur
 
-Compiler l'application (`cargo build --release -p filesend-app (dans windows/)`), puis lancer [Inno Setup 6](https://jrsoftware.org/isinfo.php) : `iscc /DAppVersion=0.1.0 windows\installer\filesend.iss`.
+Compiler l'application (`cargo build --release -p filesend-app (dans windows/)`), puis lancer [Inno Setup 6](https://jrsoftware.org/isinfo.php) : `iscc /DAppVersion=0.2.0 windows\installer\filesend.iss`.

@@ -30,6 +30,7 @@ data class HostState(
     val running: Boolean = false,
     val error: String? = null,
     val sending: Boolean = false,
+    val receivedText: Pair<String, String>? = null,
 )
 
 class HostConfig(
@@ -39,6 +40,8 @@ class HostConfig(
     val httpsPort: Int = DEFAULT_PORT,
     val decisionTimeoutMs: Long = 60_000,
     val discovery: (DiscoveryConfig) -> DiscoveryConfig = { it },
+    /** Retourne true pour accepter automatiquement les transferts de cet appareil. */
+    val isTrusted: (String) -> Boolean = { false },
     /** Journal technique (Android : logcat). Jamais de contenu de fichier. */
     val log: (String, Throwable?) -> Unit = { _, _ -> },
 )
@@ -174,9 +177,25 @@ class Host(
 
     fun cancelSend() = sendCancel.set(true)
 
+    fun rescan() {
+        discovery?.rescan()
+    }
+
+    fun sendTextTo(device: Device, text: String, onDone: (Result<Unit>) -> Unit = {}) {
+        Thread({
+            val r = runCatching { sendText(device.addr, cfg.info, text) }
+            if (r.isSuccess) update { it.copy(status = "Texte envoyé à ${device.info.alias}") }
+            else update { it.copy(status = "Échec d'envoi du texte") }
+            onDone(r)
+        }, "filesend-text").apply { isDaemon = true }.start()
+    }
+
+    fun clearReceivedText() = update { it.copy(receivedText = null) }
+
     // ---------- reception (F3) ----------
 
     private fun decide(req: IncomingRequest): Boolean {
+        if (cfg.isTrusted(req.from.fingerprint)) return true
         val id = "r${nextId.getAndIncrement()}"
         val answer = CompletableFuture<Boolean>()
         pending[id] = answer
@@ -209,6 +228,9 @@ class Host(
                 update { it.copy(status = t) }
                 notifier.done(ev.session, t, ev.tops)
                 finished()
+            }
+            is Event.TextReceived -> {
+                update { it.copy(receivedText = ev.from.alias to ev.text, status = "Texte reçu de ${ev.from.alias}") }
             }
             is Event.Failed -> {
                 val t = ev.reason.message

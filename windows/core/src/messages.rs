@@ -55,6 +55,36 @@ pub fn percent(done: u64, total: u64) -> u8 {
     ((done as u128 * 100) / total as u128).min(100) as u8
 }
 
+/// Formate un debit en o/s, Ko/s ou Mo/s.
+pub fn format_speed(bytes_per_sec: f64) -> String {
+    if bytes_per_sec < 1024.0 {
+        format!("{:.0} o/s", bytes_per_sec.max(0.0))
+    } else if bytes_per_sec < 1024.0 * 1024.0 {
+        format!("{:.0} Ko/s", bytes_per_sec / 1024.0)
+    } else {
+        format!("{:.1} Mo/s", bytes_per_sec / (1024.0 * 1024.0)).replace('.', ",")
+    }
+}
+
+/// Formate un temps restant estimatif court (ex: "12 s", "2 min").
+pub fn format_eta(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 1.0 {
+        return String::new();
+    }
+    let s = seconds.ceil() as u64;
+    if s < 60 {
+        format!("{s} s")
+    } else {
+        let m = s / 60;
+        let rem = s % 60;
+        if rem == 0 || m >= 10 {
+            format!("{m} min")
+        } else {
+            format!("{m} min {rem} s")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

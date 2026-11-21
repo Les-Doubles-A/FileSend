@@ -8,13 +8,14 @@ const title = document.getElementById("title");
 const detail = document.getElementById("detail");
 const bar = document.getElementById("bar");
 const fill = bar.querySelector("i");
-const actions = document.querySelector(".actions");
+const reqActions = document.getElementById("req-actions");
+const progActions = document.getElementById("prog-actions");
+const textActions = document.getElementById("text-actions");
 
 let cur = null;
 let timer = 0;
 let closeTimer = 0;
 
-// Masque tout de suite, detruit la fenetre un peu plus tard (si rien de nouveau n'arrive).
 function hide() {
   clearTimeout(timer);
   cur = null;
@@ -40,7 +41,10 @@ function show(p) {
   } else {
     bar.removeAttribute("aria-valuenow");
   }
-  actions.hidden = p.kind !== "request";
+  reqActions.hidden = p.kind !== "request";
+  progActions.hidden = !(isProgress && p.cancellable);
+  textActions.hidden = p.kind !== "text";
+
   const clickable = p.kind === "done" && !!p.path;
   box.classList.toggle("clickable", clickable);
   if (clickable) {
@@ -51,6 +55,7 @@ function show(p) {
     box.setAttribute("role", "alert");
   }
   if (p.kind === "done" || p.kind === "fail") timer = setTimeout(hide, 4500);
+  if (p.kind === "text") timer = setTimeout(hide, 9000);
 }
 
 function onToast(p) {
@@ -61,7 +66,6 @@ function onToast(p) {
   show(p);
 }
 listen("toast", (e) => onToast(e.payload));
-// Page prete : recupere la notification en attente (fenetre creee a la demande).
 invoke("toast_ready").then((p) => p && onToast(p));
 
 function reply(accept) {
@@ -69,6 +73,15 @@ function reply(accept) {
 }
 document.getElementById("accept").addEventListener("click", () => reply(true));
 document.getElementById("refuse").addEventListener("click", () => reply(false));
+document.getElementById("cancel").addEventListener("click", () => {
+  invoke("cancel_send").catch(() => {});
+});
+document.getElementById("copy-text").addEventListener("click", async () => {
+  if (cur && cur.text) {
+    try { await navigator.clipboard.writeText(cur.text); } catch {}
+  }
+  hide();
+});
 
 function openReceived() {
   if (cur && cur.kind === "done" && cur.path) {

@@ -79,7 +79,8 @@ class HttpsServer(
     private fun serve(sock: java.net.Socket) {
         try {
             sock.soTimeout = idleTimeoutMs
-            val input = BufferedInputStream(sock.getInputStream(), 16 * 1024)
+            runCatching { sock.tcpNoDelay = true }
+            val input = BufferedInputStream(sock.getInputStream(), 64 * 1024)
             val output = sock.getOutputStream()
             while (true) {
                 val req = try {

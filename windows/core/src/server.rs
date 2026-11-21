@@ -132,6 +132,7 @@ pub async fn start(
         .route(&p("/prepare-upload"), post(prepare_upload))
         .route(&p("/upload"), post(upload))
         .route(&p("/cancel"), post(cancel))
+        .route(&p("/text"), post(receive_text))
         .route(&p("/info"), axum::routing::get(info))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .with_state(shared);
@@ -406,7 +407,8 @@ async fn receive_file(
     if let Some(parent) = dest.parent() {
         tokio::fs::create_dir_all(parent).await.map_err(io)?;
     }
-    let mut file = tokio::fs::File::create(part).await.map_err(io)?;
+    let raw_file = tokio::fs::File::create(part).await.map_err(io)?;
+    let mut file = tokio::io::BufWriter::with_capacity(256 * 1024, raw_file);
     let mut stream = body.into_data_stream();
     let mut hasher = Sha256::new();
     let mut received = 0u64;
@@ -472,5 +474,20 @@ struct CancelQuery {
 
 async fn cancel(State(sh): State<Arc<Shared>>, Query(q): Query<CancelQuery>) -> Response {
     fail_session(&sh, &q.session_id, FailReason::Interrupted);
+    code(StatusCode::OK)
+}
+
+async fn receive_text(State(sh): State<Arc<Shared>>, body: bytes::Bytes) -> Response {
+    if body.len() > 256 * 1024 {
+        return code(StatusCode::PAYLOAD_TOO_LARGE);
+    }
+    let req: TextShareRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(_) => return code(StatusCode::BAD_REQUEST),
+    };
+    if req.text.trim().is_empty() {
+        return code(StatusCode::BAD_REQUEST);
+    }
+    emit(&sh.events, Event::TextReceived { from: req.info, text: req.text });
     code(StatusCode::OK)
 }

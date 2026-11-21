@@ -116,6 +116,25 @@ class Discovery(private val cfg: DiscoveryConfig, private val onChange: (List<De
         pool.shutdownNow()
     }
 
+    /** Declenche immediatement un sondage du sous-reseau. */
+    fun rescan() {
+        if (stopped || cfg.scan is ScanTargets.Off) return
+        pool.execute {
+            val targets = when (val t = cfg.scan) {
+                is ScanTargets.Explicit -> t.addrs
+                ScanTargets.Subnet -> subnetCandidates(cfg.httpsPort)
+                ScanTargets.Off -> emptyList()
+            }
+            val workers = Executors.newFixedThreadPool(32) { r -> Thread(r).apply { isDaemon = true } }
+            try {
+                targets.map { a -> workers.submit<Pair<DeviceInfo, InetSocketAddress>?> { probe(a)?.let { it to a } } }
+                    .forEach { f -> runCatching { f.get(5, TimeUnit.SECONDS) }.getOrNull()?.let { upsert(it.first, it.second, Via.Scan) } }
+            } finally {
+                workers.shutdownNow()
+            }
+        }
+    }
+
     // ---------- multicast ----------
 
     private fun openMulticast() {

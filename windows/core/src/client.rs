@@ -155,6 +155,7 @@ pub async fn send(
 
     let http = reqwest::Client::builder()
         .tls_danger_accept_invalid_certs(true)
+        .tcp_nodelay(true)
         .connect_timeout(Duration::from_secs(5))
         .build()
         .map_err(|_| fail(FailReason::Interrupted))?;
@@ -194,71 +195,125 @@ pub async fn send(
         resp.json().await.map_err(|_| fail(FailReason::Interrupted))?;
     let sid = prep.session_id.clone();
 
-    let sent = Arc::new(AtomicU64::new(0));
-    let mut base_done = 0u64;
-    for it in &items {
-        let token = prep.files.get(&it.id).cloned().ok_or(fail(FailReason::Interrupted))?;
-        let file = match tokio::fs::File::open(&it.path).await {
-            Ok(f) => f,
-            Err(_) => {
-                cancel_remote(&http, &base, &sid).await;
-                return Err(fail(FailReason::Interrupted));
-            }
-        };
-        sent.store(0, Ordering::SeqCst);
-        let counter = sent.clone();
+    // Envoi en flux : jusqu'a 3 fichiers en parallele pour accelerer les dossiers.
+    use futures_util::StreamExt;
+    let total_sent = Arc::new(AtomicU64::new(0));
+    let concurrency = if items.len() > 1 { 3 } else { 1 };
+    let abort = CancellationToken::new();
+
+    let results = futures_util::stream::iter(items.into_iter().map(|it| {
+        let http = http.clone();
+        let base = base.clone();
+        let sid = sid.clone();
+        let token = prep.files.get(&it.id).cloned();
+        let total_sent = total_sent.clone();
         let prog = progress.clone();
-        let (b0, tot) = (base_done, total);
-        let stream = ReaderStream::with_capacity(file, 64 * 1024).inspect_ok(move |c| {
-            let n = counter.fetch_add(c.len() as u64, Ordering::SeqCst) + c.len() as u64;
-            if let Some(p) = &prog {
-                p(b0 + n, tot);
+        let cancel = cancel.clone();
+        let abort = abort.clone();
+        let idle_timeout = opts.idle_timeout;
+        async move {
+            if abort.is_cancelled() {
+                return Err(SendError::Cancelled);
             }
-        });
-        let fut = http
-            .post(format!("{base}/upload"))
-            .query(&[("sessionId", sid.as_str()), ("fileId", it.id.as_str()), ("token", token.as_str())])
-            .header("content-length", it.size)
-            .body(reqwest::Body::wrap_stream(stream))
-            .send();
-        tokio::pin!(fut);
-        let mut last = (0u64, Instant::now());
-        let outcome: Result<reqwest::Response, SendError> = loop {
-            tokio::select! {
-                r = &mut fut => break r.map_err(|e| fail(net_reason(&e))),
-                _ = wait_cancel(&cancel) => break Err(SendError::Cancelled),
-                _ = tokio::time::sleep(Duration::from_millis(250)) => {
-                    let now = sent.load(Ordering::SeqCst);
-                    if now != last.0 {
-                        last = (now, Instant::now());
-                    } else {
-                        let limit = if now < it.size { opts.idle_timeout } else { opts.idle_timeout * 3 };
-                        if last.1.elapsed() >= limit {
-                            break Err(fail(FailReason::Interrupted));
+            let token = token.ok_or(fail(FailReason::Interrupted))?;
+            let file = tokio::fs::File::open(&it.path)
+                .await
+                .map_err(|_| fail(FailReason::Interrupted))?;
+            let file_sent = Arc::new(AtomicU64::new(0));
+            let f_counter = file_sent.clone();
+            let t_counter = total_sent.clone();
+            let stream = ReaderStream::with_capacity(file, 256 * 1024).inspect_ok(move |c| {
+                let len = c.len() as u64;
+                f_counter.fetch_add(len, Ordering::Relaxed);
+                let agg = t_counter.fetch_add(len, Ordering::Relaxed) + len;
+                if let Some(p) = &prog {
+                    p(agg, total);
+                }
+            });
+            let fut = http
+                .post(format!("{base}/upload"))
+                .query(&[
+                    ("sessionId", sid.as_str()),
+                    ("fileId", it.id.as_str()),
+                    ("token", token.as_str()),
+                ])
+                .header("content-length", it.size)
+                .body(reqwest::Body::wrap_stream(stream))
+                .send();
+            tokio::pin!(fut);
+            let mut last = (0u64, Instant::now());
+            let outcome: Result<reqwest::Response, SendError> = loop {
+                tokio::select! {
+                    r = &mut fut => break r.map_err(|e| fail(net_reason(&e))),
+                    _ = wait_cancel(&cancel) => break Err(SendError::Cancelled),
+                    _ = abort.cancelled() => break Err(SendError::Cancelled),
+                    _ = tokio::time::sleep(Duration::from_millis(250)) => {
+                        let now = file_sent.load(Ordering::Relaxed);
+                        if now != last.0 {
+                            last = (now, Instant::now());
+                        } else {
+                            let limit = if now < it.size { idle_timeout } else { idle_timeout * 3 };
+                            if last.1.elapsed() >= limit {
+                                break Err(fail(FailReason::Interrupted));
+                            }
                         }
                     }
                 }
-            }
-        };
-        match outcome {
-            Ok(r) if r.status().is_success() => {}
-            Ok(r) => {
-                let reason = if r.status().as_u16() == 507 {
-                    FailReason::DiskFull
-                } else {
-                    FailReason::Interrupted
-                };
-                cancel_remote(&http, &base, &sid).await;
-                return Err(fail(reason));
-            }
-            Err(e) => {
-                cancel_remote(&http, &base, &sid).await;
-                return Err(e);
+            };
+            match outcome {
+                Ok(r) if r.status().is_success() => Ok(()),
+                Ok(r) => {
+                    let reason = if r.status().as_u16() == 507 {
+                        FailReason::DiskFull
+                    } else {
+                        FailReason::Interrupted
+                    };
+                    abort.cancel();
+                    Err(fail(reason))
+                }
+                Err(e) => {
+                    abort.cancel();
+                    Err(e)
+                }
             }
         }
-        base_done += it.size;
+    }))
+    .buffer_unordered(concurrency)
+    .collect::<Vec<_>>()
+    .await;
+
+    for r in results {
+        if let Err(e) = r {
+            cancel_remote(&http, &base, &sid).await;
+            return Err(e);
+        }
     }
     Ok(())
+}
+
+/// Envoie rapidement un texte / lien au presse-papiers d'un appareil FileSend.
+pub async fn send_text(target: SocketAddr, info: &DeviceInfo, text: &str) -> Result<(), SendError> {
+    install_crypto_provider();
+    let http = reqwest::Client::builder()
+        .tls_danger_accept_invalid_certs(true)
+        .tcp_nodelay(true)
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|_| SendError::Failed(FailReason::Interrupted))?;
+    let base = format!("https://{target}{API_PREFIX}");
+    let req = TextShareRequest { info: info.clone(), text: text.to_string() };
+    let resp = http
+        .post(format!("{base}/text"))
+        .json(&req)
+        .send()
+        .await
+        .map_err(|e| SendError::Failed(net_reason(&e)))?;
+    match resp.status().as_u16() {
+        200 => Ok(()),
+        403 => Err(SendError::Failed(FailReason::Refused)),
+        _ => Err(SendError::Failed(FailReason::Interrupted)),
+    }
 }
 
 async fn wait_cancel(c: &Option<CancellationToken>) {

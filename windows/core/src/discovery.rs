@@ -175,6 +175,7 @@ fn clean_alias(s: &str) -> String {
 
 pub struct Discovery {
     rx: watch::Receiver<Vec<Device>>,
+    rescan_tx: Arc<tokio::sync::Notify>,
     tasks: Vec<JoinHandle<()>>,
 }
 
@@ -182,6 +183,7 @@ impl Discovery {
     pub async fn start(cfg: DiscoveryConfig) -> Result<Self, String> {
         install_crypto_provider();
         let (tx, rx) = watch::channel(Vec::new());
+        let rescan_tx = Arc::new(tokio::sync::Notify::new());
         let core = Arc::new(Core {
             own_fingerprint: cfg.info.fingerprint.clone(),
             ttl: cfg.ttl,
@@ -199,11 +201,14 @@ impl Discovery {
                 announce: true,
             })
             .map_err(|e| e.to_string())?;
-            let (s1, interval) = (sock.clone(), cfg.announce_interval);
+            let (s1, interval, n1) = (sock.clone(), cfg.announce_interval, rescan_tx.clone());
             tasks.push(tokio::spawn(async move {
                 loop {
                     let _ = s1.send_to(&packet, dest).await;
-                    tokio::time::sleep(interval).await;
+                    tokio::select! {
+                        _ = tokio::time::sleep(interval) => {}
+                        _ = n1.notified() => {}
+                    }
                 }
             }));
             let c = core.clone();
@@ -237,13 +242,18 @@ impl Discovery {
 
         if !matches!(cfg.scan, ScanTargets::Off) {
             let http = probe_client()?;
-            let (c, h, scan) = (core.clone(), http.clone(), cfg.scan.clone());
+            let (c, h, scan, n2) = (core.clone(), http.clone(), cfg.scan.clone(), rescan_tx.clone());
             let (delay, every, port) = (cfg.scan_initial_delay, cfg.scan_interval, cfg.https_port);
             tasks.push(tokio::spawn(async move {
-                tokio::time::sleep(delay).await;
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {}
+                    _ = n2.notified() => {}
+                }
+                let mut forced = false;
                 loop {
-                    // Repli : on ne sonde que si aucun appareil n'est connu.
-                    if c.is_empty() {
+                    // Repli : on sonde si aucun appareil n'est connu ou si un rescan manuel a ete demande.
+                    if c.is_empty() || forced {
+                        forced = false;
                         let targets = match &scan {
                             ScanTargets::Explicit(v) => v.clone(),
                             ScanTargets::Subnet => subnet_candidates(port).await,
@@ -254,7 +264,7 @@ impl Discovery {
                                 let h = h.clone();
                                 async move { probe(&h, addr).await.map(|i| (i, addr)) }
                             })
-                            .buffer_unordered(64)
+                            .buffer_unordered(128)
                             .filter_map(|x| async move { x })
                             .collect()
                             .await;
@@ -262,7 +272,10 @@ impl Discovery {
                             c.upsert(info, addr, Via::Scan);
                         }
                     }
-                    tokio::time::sleep(every).await;
+                    tokio::select! {
+                        _ = tokio::time::sleep(every) => {}
+                        _ = n2.notified() => { forced = true; }
+                    }
                 }
             }));
             // Les appareils trouves par sondage n'annoncent rien : on les reverifie.
@@ -280,11 +293,16 @@ impl Discovery {
                 }
             }));
         }
-        Ok(Self { rx, tasks })
+        Ok(Self { rx, rescan_tx, tasks })
     }
 
     pub fn devices(&self) -> Vec<Device> {
         self.rx.borrow().clone()
+    }
+
+    /// Declenche immediatement une annonce multicast et un sondage reseau.
+    pub fn rescan(&self) {
+        self.rescan_tx.notify_waiters();
     }
 
     /// Notifie a chaque changement de la liste visible.
@@ -366,10 +384,15 @@ async fn subnet_candidates(port: u16) -> Vec<SocketAddr> {
                 .unwrap_or(false);
             ok.then_some(a)
         })
-        .buffer_unordered(64)
+        .buffer_unordered(128)
         .filter_map(|x| async move { x })
         .collect()
         .await
+}
+
+/// Adresse IPv4/IPv6 locale utilisee pour sortir sur le reseau local.
+pub fn local_ip() -> Option<IpAddr> {
+    primary_ip()
 }
 
 /// Adresse locale utilisee pour sortir du reseau (aucun paquet n'est envoye).

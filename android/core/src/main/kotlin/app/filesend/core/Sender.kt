@@ -151,10 +151,11 @@ fun send(
         conn.disconnect()
     }
 
-    // upload : un fichier a la fois, en flux.
-    var baseDone = 0L
-    for ((i, src) in sources.withIndex()) {
-        if (cancelled.get()) { cancelRemote(prep.sessionId); throw SendCancelled() }
+    // upload : jusqu'a 3 fichiers en parallele pour accelerer les dossiers.
+    val totalSent = AtomicLong(0)
+    val abort = AtomicBoolean(false)
+    fun uploadOne(i: Int, src: SendSource) {
+        if (cancelled.get() || abort.get()) throw SendCancelled()
         val id = "f$i"
         val sent = AtomicLong(0)
         val c = open("/upload", mapOf("sessionId" to prep.sessionId, "fileId" to id, "token" to (prep.files[id] ?: throw SendException(FailReason.Interrupted)))).apply {
@@ -167,33 +168,85 @@ fun send(
         try {
             src.open().use { ins ->
                 c.outputStream.use { out ->
-                    val b = ByteArray(64 * 1024)
+                    val b = ByteArray(256 * 1024)
                     while (true) {
-                        if (cancelled.get()) throw SendCancelled()
+                        if (cancelled.get() || abort.get()) throw SendCancelled()
                         val n = ins.read(b)
                         if (n < 0) break
                         out.write(b, 0, n)
-                        val s = sent.addAndGet(n.toLong())
-                        progress?.invoke(baseDone + s, total)
+                        sent.addAndGet(n.toLong())
+                        val agg = totalSent.addAndGet(n.toLong())
+                        progress?.invoke(agg, total)
                     }
                 }
             }
             val code = c.responseCode
             if (code != 200) throw SendException(if (code == 507) FailReason.DiskFull else FailReason.Interrupted)
         } catch (e: SendCancelled) {
-            cancelRemote(prep.sessionId)
+            abort.set(true)
             throw e
         } catch (e: SendException) {
-            cancelRemote(prep.sessionId)
+            abort.set(true)
             throw e
         } catch (e: IOException) {
-            cancelRemote(prep.sessionId)
+            abort.set(true)
             if (cancelled.get()) throw SendCancelled()
             throw SendException(if (watch.stalled) FailReason.Interrupted else reason(e), e)
         } finally {
             watch.close()
             c.disconnect()
         }
-        baseDone += src.size
+    }
+
+    if (sources.size == 1) {
+        try {
+            uploadOne(0, sources[0])
+        } catch (e: Exception) {
+            cancelRemote(prep.sessionId)
+            throw e
+        }
+    } else {
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(3, sources.size)) { r ->
+            Thread(r, "filesend-up").apply { isDaemon = true }
+        }
+        try {
+            val futures = sources.mapIndexed { i, src -> pool.submit { uploadOne(i, src) } }
+            for (f in futures) {
+                try {
+                    f.get()
+                } catch (e: java.util.concurrent.ExecutionException) {
+                    cancelRemote(prep.sessionId)
+                    throw (e.cause ?: e)
+                }
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+}
+
+/** Envoie rapidement un texte ou lien vers un appareil FileSend. */
+fun sendText(target: InetSocketAddress, info: DeviceInfo, text: String) {
+    val ssl = trustAllSslContext().socketFactory
+    val url = URL("https://${target.hostString}:${target.port}$API_PREFIX/text")
+    val payload = ProtocolJson.encodeToString(TextShareRequest(info, text)).toByteArray()
+    val conn = (url.openConnection() as HttpsURLConnection).apply {
+        sslSocketFactory = ssl
+        setHostnameVerifier { _, _ -> true }
+        connectTimeout = 5_000
+        readTimeout = 10_000
+        useCaches = false
+        requestMethod = "POST"
+        doOutput = true
+        setFixedLengthStreamingMode(payload.size)
+        setRequestProperty("Content-Type", "application/json")
+    }
+    try {
+        conn.outputStream.use { it.write(payload) }
+        if (conn.responseCode != 200) throw SendException(FailReason.Interrupted)
+    } catch (e: IOException) {
+        throw SendException(FailReason.Interrupted, e)
+    } finally {
+        conn.disconnect()
     }
 }

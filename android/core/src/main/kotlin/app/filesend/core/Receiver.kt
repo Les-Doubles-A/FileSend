@@ -74,6 +74,7 @@ class Receiver(
                 req.query["sessionId"]?.let { failSession(it, FailReason.Interrupted) }
                 HttpResponse(200)
             }
+            req.method == "POST" && route == "/text" -> receiveText(req)
             else -> HttpResponse(404)
         }
     }
@@ -241,9 +242,22 @@ class Receiver(
         return HttpResponse(if (full) 507 else 500)
     }
 
+    private fun receiveText(req: HttpRequest): HttpResponse {
+        if (req.contentLength > 256 * 1024) return HttpResponse(413)
+        val parsed: TextShareRequest = try {
+            ProtocolJson.decodeFromString(String(req.body.readBytes(), Charsets.UTF_8))
+        } catch (_: Exception) {
+            return HttpResponse(400)
+        }
+        if (parsed.text.isBlank()) return HttpResponse(400)
+        onEvent(Event.TextReceived(parsed.info, parsed.text))
+        return HttpResponse(200)
+    }
+
     private fun receive(s: Session, entry: FileEntry, partial: PartialFile, req: HttpRequest) {
         val digest = MessageDigest.getInstance("SHA-256")
-        val buf = ByteArray(64 * 1024)
+        val buf = ByteArray(256 * 1024)
+        val bufferedOut = java.io.BufferedOutputStream(partial.out, 256 * 1024)
         var received = 0L
         var lastEmit = 0L
         val step = maxOf(entry.size / 100, 256L * 1024)
@@ -260,7 +274,7 @@ class Receiver(
             received += n
             if (received > entry.size) throw Failure(422, FailReason.Interrupted)
             digest.update(buf, 0, n)
-            partial.out.write(buf, 0, n)
+            bufferedOut.write(buf, 0, n)
             if (received - lastEmit >= step) {
                 lastEmit = received
                 val done = synchronized(lock) {
@@ -275,7 +289,7 @@ class Receiver(
         entry.sha256?.let {
             if (!it.equals(Identity.hex(digest.digest()), ignoreCase = true)) throw Failure(422, FailReason.Interrupted)
         }
-        partial.out.flush()
+        bufferedOut.flush()
     }
 
     private fun failSession(id: String, reason: FailReason) {

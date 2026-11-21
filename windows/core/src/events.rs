@@ -35,6 +35,8 @@ pub enum Event {
     Progress { session: String, done: u64, total: u64 },
     /// Cote receveur : tout est recu. `paths` = elements de premier niveau enregistres.
     Completed { session: String, from: DeviceInfo, paths: Vec<PathBuf> },
+    /// Cote receveur : texte / lien recu directement.
+    TextReceived { from: DeviceInfo, text: String },
     Failed { session: String, reason: FailReason },
 }
 

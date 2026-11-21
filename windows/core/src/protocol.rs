@@ -37,3 +37,11 @@ pub struct PrepareUploadResponse {
     pub session_id: String,
     pub files: HashMap<String, String>,
 }
+
+/// Envoi rapide de texte / presse-papiers entre appareils FileSend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextShareRequest {
+    pub info: DeviceInfo,
+    pub text: String,
+}
